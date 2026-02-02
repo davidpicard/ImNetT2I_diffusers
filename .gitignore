@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+outputs/
+wandb/
+trackio_logs/
+.cache/
+lightning_logs/
+web_app/chats
+*.ckpt
+*.pt
+*.log
