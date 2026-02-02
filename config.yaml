@@ -1,0 +1,33 @@
+accelerator:
+  mixed_precision: fp16
+  gradient_accumulation_steps: 16
+
+data: 
+  imagenet_path: /media/ssd/datasets/train
+  im_size: 256
+  num_workers: 8
+
+text: 
+  model: google/gemma-3-1b-pt
+  max_length: 128
+
+sampler: 
+  num_train_timesteps: 1000
+
+model:
+  patch_size: 16
+  in_channels: 3
+  num_layers: 12
+  num_attention_heads: 16
+  attention_head_dim: 64
+  joint_attention_dim: 640
+  caption_projection_dim: 1024
+  pooled_projection_dim: 1
+
+training:
+  batch_size: 16
+  epochs: 100
+  lr: 0.0001
+
+logging:
+  log_images_every_n_steps: 5000
