@@ -6,9 +6,10 @@ from torchvision.transforms.v2.functional import resize, crop
 
 class CaptionImageNetDataset(Dataset):
 
-    def __init__(self, imagenet_path: str, im_size: int = 256):
+    def __init__(self, imagenet_path: str, im_size: int = 256, max_size: int= 512):
         self.imagenet_path = imagenet_path
         self.im_size = im_size
+        self.max_size = max_size
         # Login using e.g. `huggingface-cli login` to access this dataset
         self.ds = load_dataset("Lucasdegeorge/ImageNet_TA_IA", split="train").with_format("torch")
 
@@ -28,6 +29,17 @@ class CaptionImageNetDataset(Dataset):
             img = img[0:3, :, :]
         sample['size'] = torch.tensor([h, w])
 
+        # resize if >= max
+        if h>self.max_size or h>=self.max_size:
+            if h>w:
+                w = int(w*self.max_size/h)
+                h = self.max_size
+            else:
+                h = int(h*self.max_size/w)
+                w = self.max_size
+            img = resize(img, (h, w))
+
+        # resize if <= min 
         if min(h,w)<self.im_size:
             #crop
             if h < w :

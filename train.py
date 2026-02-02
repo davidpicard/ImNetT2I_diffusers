@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from diffusers import SD3Transformer2DModel, FlowMatchEulerDiscreteScheduler
+from diffusers import SD3Transformer2DModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
@@ -10,43 +10,53 @@ import hydra
 from tqdm import tqdm
 from accelerate import Accelerator
 from im_dataset import CaptionImageNetDataset
+from sampler import FMEulerSampler
 import wandb
+
+
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg):
 
-    print("→ config:")
-    print(cfg)
-
-    print("→ loading dataset...", end='', flush=True)
-    ds = CaptionImageNetDataset(cfg.data.imagenet_path, im_size=cfg.data.im_size)
-    train_ds = DataLoader(ds, batch_size=cfg.training.batch_size, shuffle=True, num_workers=cfg.data.num_workers, drop_last=True)
+    print("→ preparing accelerator...", end='', flush=True)
+    accelerator = Accelerator(**(cfg.accelerator))
     print(" done.✅")
+    # small utility print to avoid clutter
+    def print_r0(s: str, **kwargs):
+        if accelerator.is_main_process:
+            print(s, **kwargs)
 
-    print("→ loading model...", end='', flush=True)
+    print_r0("→ config:")
+    print_r0(cfg)
+
+    print_r0("→ loading dataset...", end='', flush=True)
+    ds = CaptionImageNetDataset(cfg.data.imagenet_path, im_size=cfg.data.im_size, max_size=cfg.data.max_size)
+    train_ds = DataLoader(ds, batch_size=cfg.training.batch_size, shuffle=True, num_workers=cfg.data.num_workers, drop_last=True)
+    print_r0(" done.✅")
+
+    print_r0("→ loading model...", end='', flush=True)
     model = SD3Transformer2DModel(sample_size=cfg.data.im_size,out_channels=cfg.model.in_channels, **(cfg.model))
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr)
-    train_scheduler = FlowMatchEulerDiscreteScheduler(num_train_timesteps=cfg.sampler.num_train_timesteps)
-    val_scheduler = FlowMatchEulerDiscreteScheduler(num_train_timesteps=cfg.sampler.num_train_timesteps)
-    print(" done.✅")
+    train_scheduler = FMEulerSampler(train_steps=cfg.sampler.num_train_timesteps)
+    print_r0(" done.✅")
 
-    print("→ loading text encoder...", end='', flush=True)
+    print_r0("→ loading text encoder...", end='', flush=True)
     tokenizer = AutoTokenizer.from_pretrained(cfg.text.model)
     text_encoder = AutoModelForCausalLM.from_pretrained(cfg.text.model)
     text_encoder.eval()
-    print(" done.✅")
+    print_r0(" done.✅")
 
-    print("→ preparing accelerator...", end='', flush=True)
-    accelerator = Accelerator(**(cfg.accelerator))
+    print_r0("→ preparing distributed setting...", end='', flush=True)
     device = accelerator.device
     model, optimizer, text_encoder, train_ds = accelerator.prepare(model, optimizer, text_encoder, train_ds)
-    print(" done.✅")
+    print_r0(" done.✅")
 
-    print("→ start training:")
-    wandb.init(
-        project="SD3-ImageNet",
-        config=OmegaConf.to_container(cfg, resolve=True)
-    )
+    if accelerator.is_main_process:
+        wandb.init(
+            project="SD3-ImageNet",
+            config=OmegaConf.to_container(cfg, resolve=True)
+        )
+    print_r0("→ start training:")
     for e in range(cfg.training.epochs):
         with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):
@@ -67,18 +77,15 @@ def main(cfg):
                     txt_latents = hidden[-1].detach()
 
                     # noise image
-                    time = torch.randint(cfg.sampler.num_train_timesteps, (cfg.training.batch_size,))
-                    sigma = train_scheduler.sigmas[time].to(img.device)
-                    time = time.long().to(img.device)
-                    time = time.long().to(img.device)
+                    time = torch.randint(train_scheduler.train_steps, (cfg.training.batch_size,), device=img.device)
                     noise = torch.randn_like(img)
-                    noisy_sample = sigma.view(-1, 1, 1, 1)*noise + (1.-sigma).view(-1, 1, 1, 1)*img 
+                    noisy_sample = train_scheduler.add_noise(img, time, noise)
 
                     # predict and compute loss
                     target = img - noise
                     pred = model(hidden_states=noisy_sample,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(cfg.training.batch_size, 1).to(device),
+                                pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
                                 timestep=time,
                                 return_dict=False)[0]
                     
@@ -89,22 +96,22 @@ def main(cfg):
                     optimizer.zero_grad()
                 if idx % cfg.accelerator.gradient_accumulation_steps == 0:
                     bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {loss.item():.3f}")
-                    wandb.log({"epoch": e, "global_tep": idx+(e*len(train_ds)), "train_loss": loss.item()})
+                    if accelerator.is_main_process:
+                        wandb.log({"epoch": e, "global_tep": idx+(e*len(train_ds)), "train_loss": loss.item()})
 
                 if idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
                     # generate image
                     with torch.no_grad():
                         print(f"prompts: {prompts[0]}")
                         xt = torch.randn_like(img)
-                        val_scheduler.set_timesteps(50)
-                        for t in val_scheduler.timesteps:
+                        for t in train_scheduler.get_timesteps(50):
                             t = torch.tensor([t,]).to(device)
                             pred = model(hidden_states=xt,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(cfg.training.batch_size, 1).to(device),
+                                pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
-                            xt = val_scheduler.step(pred, t, xt, return_dict=False)[0]
+                            xt = train_scheduler.step(xt, pred, 50)
                         image = (xt[0].cpu().permute(1,2,0)/2.+0.5) # between 0 and 1
                         image = np.uint8(255*image.numpy())
                         image = wandb.Image(image, caption=prompts[0][0:256])
