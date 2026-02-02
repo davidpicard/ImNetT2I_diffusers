@@ -48,7 +48,7 @@ def main(cfg):
         config=OmegaConf.to_container(cfg, resolve=True)
     )
     for e in range(cfg.training.epochs):
-        with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5) as bar:
+        with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):
                 img = batch['image']
                 txt = batch['caption']
@@ -91,10 +91,10 @@ def main(cfg):
                     bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {loss.item():.3f}")
                     wandb.log({"epoch": e, "global_tep": idx+(e*len(train_ds)), "train_loss": loss.item()})
 
-                if idx % cfg.logging.log_images_every_n_steps == 0:
+                if idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process::
                     # generate image
                     with torch.no_grad():
-                        print(f"prompts: {prompts}")
+                        print(f"prompts: {prompts[0]}")
                         xt = torch.randn_like(img)
                         val_scheduler.set_timesteps(50)
                         for t in val_scheduler.timesteps:
