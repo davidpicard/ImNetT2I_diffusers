@@ -96,8 +96,6 @@ def main(cfg):
                     with torch.no_grad():
                         print(f"prompts: {prompts}")
                         xt = torch.randn_like(img)
-                        #plt.imshow((xt[0].cpu().permute(1,2,0)/2.+0.5).clamp(0, 1))
-                        #plt.pause(0.2)
                         val_scheduler.set_timesteps(50)
                         for t in val_scheduler.timesteps:
                             t = torch.tensor([t,]).to(device)
