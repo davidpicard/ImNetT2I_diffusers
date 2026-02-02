@@ -91,7 +91,7 @@ def main(cfg):
                     bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {loss.item():.3f}")
                     wandb.log({"epoch": e, "global_tep": idx+(e*len(train_ds)), "train_loss": loss.item()})
 
-                if idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process::
+                if idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
                     # generate image
                     with torch.no_grad():
                         print(f"prompts: {prompts[0]}")
