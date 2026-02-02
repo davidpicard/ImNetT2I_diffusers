@@ -19,11 +19,11 @@ model:
   patch_size: 16
   in_channels: 3
   num_layers: 12
-  num_attention_heads: 16
+  num_attention_heads: 18
   attention_head_dim: 64
-  joint_attention_dim: 640
-  caption_projection_dim: 1024
-  pooled_projection_dim: 1024
+  joint_attention_dim: 1152
+  caption_projection_dim: 1152
+  pooled_projection_dim: 1152
 
 training:
   batch_size: 16
