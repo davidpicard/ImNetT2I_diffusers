@@ -13,6 +13,20 @@ from im_dataset import CaptionImageNetDataset
 from sampler import FMEulerSampler
 import wandb
 
+def save_ckpt(path, model, optimizer, epoch):
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            }, path)
+
+def load_ckpt(path, model, optimizer):
+    checkpoint = torch.load(PATH, weights_only=True)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.train()
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    return model, optimizer, epoch
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
@@ -64,7 +78,6 @@ def main(cfg):
                 txt = batch['caption']
                 size = batch['size']
                 crop = batch['crop']
-                #mask = batch['mask']
 
                 with accelerator.accumulate(model):
                     # encode caption
@@ -116,12 +129,12 @@ def main(cfg):
                         image = np.uint8(255*image.numpy())
                         image = wandb.Image(image, caption=prompts[0][0:256])
                         wandb.log({"generated_image": image})
+                
+                if idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
+                    path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{idx}.ckpt"
+                    print_r0(f"→ saving checkpoint to {path}")
+                    save_ckpt(path, model, optimizer, e)
 
             
 if __name__ == "__main__":
     main()
-
-
-      
-    
-
