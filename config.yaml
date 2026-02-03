@@ -18,7 +18,7 @@ sampler:
 model:
   patch_size: 16
   in_channels: 3
-  num_layers: 12
+  num_layers: 14
   num_attention_heads: 18
   attention_head_dim: 64
   joint_attention_dim: 1152
