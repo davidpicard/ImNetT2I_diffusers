@@ -58,8 +58,8 @@ def main(cfg):
             try:
                 model, optimizer, start_epoch = load_ckpt(cfg.checkpoint.load_from, model, optimizer)
                 print(f"→ checkpoint restored from {cfg.checkpoint.load_from} at epoch {start_epoch}")
-            except:
-                print(f"❌ impossible to load from {cfg.checkpoint.load_from}!")
+            except Exception as e:
+                print(f"❌ impossible to load from {cfg.checkpoint.load_from}! ({e})")
     print_r0(" done.✅")
 
     print_r0("→ loading text encoder...", end='', flush=True)
