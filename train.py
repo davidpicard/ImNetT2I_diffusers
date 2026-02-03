@@ -79,7 +79,7 @@ def main(cfg):
             config=OmegaConf.to_container(cfg, resolve=True)
         )
     print_r0("→ start training:")
-    train_scheduler = FMEulerSampler(model, tokenizer, text_encoder, train_steps=cfg.sampler.num_train_timesteps)
+    train_scheduler = FMEulerSampler(cfg, model, tokenizer, text_encoder, train_steps=cfg.sampler.num_train_timesteps)
     for e in range(start_epoch, cfg.training.epochs):
         with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):

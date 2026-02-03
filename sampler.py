@@ -2,7 +2,8 @@ import torch
 import numpy as np
 
 class FMEulerSampler():
-    def __init__(self, model, tokenizer, text_encoder, train_steps: int = 1000):
+    def __init__(self, cfg, model, tokenizer, text_encoder, train_steps: int = 1000):
+        self.cfg = cfg
         self.train_steps = train_steps
         self.model = model
         self.tokenizer = tokenizer
@@ -34,13 +35,13 @@ class FMEulerSampler():
                 t = torch.tensor([t,]).to(device)
                 pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(1, self.model.pooled_projection_dim).to(device),
+                                pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
                 if cfg > 1:
                     u_pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=torch.zeros_like(txt_latents),
-                                pooled_projections=torch.zeros(1, self.model.pooled_projection_dim).to(device),
+                                pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
                     pred = pred + cfg*(pred - u_pred)
