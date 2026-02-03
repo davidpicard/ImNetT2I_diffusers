@@ -79,6 +79,10 @@ def main(cfg):
                     outputs = text_encoder.forward(input_ids=ids, attention_mask=att, output_hidden_states=True)
                     hidden = outputs.hidden_states
                     txt_latents = hidden[-1].detach()
+                    # condition drop out
+                    zeros_latents = torch.zeros_like(txt_latents)
+                    p = (torch.rand((cfg.training.batch_size,1, 1)).to(device)>0.1).float()
+                    txt_latents = p*txt_latents + (1-p)*zeros_latents
 
                     # noise image
                     time = torch.randint(train_scheduler.train_steps, (cfg.training.batch_size,), device=img.device)
