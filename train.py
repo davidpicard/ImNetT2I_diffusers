@@ -11,6 +11,7 @@ from tqdm import tqdm
 from accelerate import Accelerator
 from im_dataset import CaptionImageNetDataset
 from sampler import FMEulerSampler
+from pathlib import Path
 import wandb
 
 def save_ckpt(path, model, optimizer, epoch):
@@ -21,7 +22,7 @@ def save_ckpt(path, model, optimizer, epoch):
             }, path)
 
 def load_ckpt(path, model, optimizer):
-    checkpoint = torch.load(PATH, weights_only=True)
+    checkpoint = torch.load(path, weights_only=True)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.train()
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -51,7 +52,13 @@ def main(cfg):
     print_r0("→ loading model...", end='', flush=True)
     model = SD3Transformer2DModel(sample_size=cfg.data.im_size,out_channels=cfg.model.in_channels, **(cfg.model))
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr)
-    train_scheduler = FMEulerSampler(train_steps=cfg.sampler.num_train_timesteps)
+    start_epoch = 0
+    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
+        try:
+            model, optimizer, start_epoch = load_ckpt(cfg.checkpoint.load_from, model, optimizer)
+            print(f"→ checkpoint restored from {cfg.checkpoint.load_from} at epoch {start_epoch}")
+        except:
+            print(f"❌ impossible to load from {cfg.checkpoint.load_from}!")
     print_r0(" done.✅")
 
     print_r0("→ loading text encoder...", end='', flush=True)
@@ -71,9 +78,11 @@ def main(cfg):
             config=OmegaConf.to_container(cfg, resolve=True)
         )
     print_r0("→ start training:")
-    for e in range(cfg.training.epochs):
+    train_scheduler = FMEulerSampler(model, tokenizer, text_encoder, train_steps=cfg.sampler.num_train_timesteps)
+    for e in range(start_epoch, cfg.training.epochs):
         with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):
+                global_idx = idx + e*len(train_ds)
                 img = batch['image']
                 txt = batch['caption']
                 size = batch['size']
@@ -110,28 +119,19 @@ def main(cfg):
                 if idx % cfg.accelerator.gradient_accumulation_steps == 0:
                     bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {loss.item():.3f}")
                     if accelerator.is_main_process:
-                        wandb.log({"epoch": e, "global_tep": idx+(e*len(train_ds)), "train_loss": loss.item()})
+                        wandb.log({"epoch": e, "global_step": global_idx, "train_loss": loss.item()})
 
-                if idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
+                if global_idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
                     # generate image
                     with torch.no_grad():
-                        print(f"prompts: {prompts[0]}")
-                        xt = torch.randn_like(img)
-                        for t in train_scheduler.get_timesteps(50):
-                            t = torch.tensor([t,]).to(device)
-                            pred = model(hidden_states=xt,
-                                encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
-                                timestep=t,
-                                return_dict=False)[0].detach()
-                            xt = train_scheduler.step(xt, pred, 50)
-                        image = (xt[0].cpu().permute(1,2,0)/2.+0.5) # between 0 and 1
-                        image = np.uint8(255*image.numpy())
-                        image = wandb.Image(image, caption=prompts[0][0:256])
+                        prompt = "This is a close-up photograph of a pair of purple thistle flowers on a plant. The flowers have vibrant colors."
+                        xt = torch.randn_like(img)[0:1]
+                        image = train_scheduler.generate(xt, prompt)
+                        image = wandb.Image(image, caption=prompt)
                         wandb.log({"generated_image": image})
                 
-                if idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
-                    path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{idx}.ckpt"
+                if global_idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
+                    path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
                     print_r0(f"→ saving checkpoint to {path}")
                     save_ckpt(path, model, optimizer, e)
 

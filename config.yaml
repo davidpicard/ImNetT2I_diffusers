@@ -36,3 +36,4 @@ logging:
 checkpoint:
   every_n_steps: 10000
   save_dir: ./checkpoints/
+  load_from: null
