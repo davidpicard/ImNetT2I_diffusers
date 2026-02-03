@@ -34,13 +34,13 @@ class FMEulerSampler():
                 t = torch.tensor([t,]).to(device)
                 pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(1, self.model.config.pooled_projection_dim).to(device),
+                                pooled_projections=torch.zeros(1, self.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
                 if cfg > 1:
                     u_pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=torch.zeros_like(txt_latents),
-                                pooled_projections=torch.zeros(1, self.model.config.pooled_projection_dim).to(device),
+                                pooled_projections=torch.zeros(1, self.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
                     pred = pred + cfg*(pred - u_pred)

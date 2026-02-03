@@ -53,12 +53,13 @@ def main(cfg):
     model = SD3Transformer2DModel(sample_size=cfg.data.im_size,out_channels=cfg.model.in_channels, **(cfg.model))
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr)
     start_epoch = 0
-    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
-        try:
-            model, optimizer, start_epoch = load_ckpt(cfg.checkpoint.load_from, model, optimizer)
-            print(f"→ checkpoint restored from {cfg.checkpoint.load_from} at epoch {start_epoch}")
-        except:
-            print(f"❌ impossible to load from {cfg.checkpoint.load_from}!")
+    if accelerator.is_main_process:
+        if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
+            try:
+                model, optimizer, start_epoch = load_ckpt(cfg.checkpoint.load_from, model, optimizer)
+                print(f"→ checkpoint restored from {cfg.checkpoint.load_from} at epoch {start_epoch}")
+            except:
+                print(f"❌ impossible to load from {cfg.checkpoint.load_from}!")
     print_r0(" done.✅")
 
     print_r0("→ loading text encoder...", end='', flush=True)
