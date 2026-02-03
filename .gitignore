@@ -9,3 +9,4 @@ web_app/chats
 *.ckpt
 *.pt
 *.log
+debug.yaml
