@@ -14,27 +14,13 @@ from sampler import FMEulerSampler
 from pathlib import Path
 import wandb
 
-def save_ckpt(path, model, optimizer, epoch):
-    torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            }, path)
-
-def load_ckpt(path, model, optimizer):
-    checkpoint = torch.load(path, weights_only=True)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.train()
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
-    return model, optimizer, epoch
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg):
 
     print("→ preparing accelerator...", end='', flush=True)
-    accelerator = Accelerator(**(cfg.accelerator))
+    accelerator = Accelerator(**(cfg.accelerator), project_dir=cfg.checkpoint.save_dir)
     print(" done.✅")
     # small utility print to avoid clutter
     def print_r0(s: str, **kwargs):
@@ -52,14 +38,6 @@ def main(cfg):
     print_r0("→ loading model...", end='', flush=True)
     model = SD3Transformer2DModel(sample_size=cfg.data.im_size,out_channels=cfg.model.in_channels, **(cfg.model))
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr)
-    start_epoch = 0
-    if accelerator.is_main_process:
-        if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
-            try:
-                model, optimizer, start_epoch = load_ckpt(cfg.checkpoint.load_from, model, optimizer)
-                print(f"→ checkpoint restored from {cfg.checkpoint.load_from} at epoch {start_epoch}")
-            except Exception as e:
-                print(f"❌ impossible to load from {cfg.checkpoint.load_from}! ({e})")
     print_r0(" done.✅")
 
     print_r0("→ loading text encoder...", end='', flush=True)
@@ -73,6 +51,9 @@ def main(cfg):
     model, optimizer, text_encoder, train_ds = accelerator.prepare(model, optimizer, text_encoder, train_ds)
     print_r0(" done.✅")
 
+    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
+        accelerator.load_state(cfg.checkpoint.load_from)
+
     if accelerator.is_main_process:
         wandb.init(
             project="SD3-ImageNet",
@@ -80,7 +61,7 @@ def main(cfg):
         )
     print_r0("→ start training:")
     train_scheduler = FMEulerSampler(cfg, model, tokenizer, text_encoder, train_steps=cfg.sampler.num_train_timesteps)
-    for e in range(start_epoch, cfg.training.epochs):
+    for e in range(cfg.training.epochs):
         with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):
                 global_idx = idx + e*len(train_ds)
@@ -134,7 +115,7 @@ def main(cfg):
                 if global_idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
                     print_r0(f"→ saving checkpoint to {path}")
-                    save_ckpt(path, model, optimizer, e)
+                    accelerator.save_state(path)
 
             
 if __name__ == "__main__":
