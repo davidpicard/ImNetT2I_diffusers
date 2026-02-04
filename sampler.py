@@ -12,9 +12,12 @@ class FMEulerSampler():
     def add_noise(self, sample, t, noise):
         t = t.view(-1, 1, 1, 1)
         return sample * t/self.train_steps + noise*(1-t/self.train_steps)
+    
+    def get_v(self, pred, noisy_sample, t):
+        return (pred - noisy_sample)/(1.-t.view(-1, 1, 1, 1).float()/self.train_steps).clamp_min(0.05)
 
     def get_timesteps(self, num_timesteps: int = 50):
-        t = torch.linspace(0, self.train_steps, num_timesteps).long()
+        t = torch.linspace(0, self.train_steps-1, num_timesteps).long()
         return t
 
     def step(self, sample, pred, num_timesteps):
@@ -38,12 +41,14 @@ class FMEulerSampler():
                                 pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
+                pred = self.get_v(pred, xt, t)
                 if cfg > 0:
                     u_pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=torch.zeros_like(txt_latents),
                                 pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
+                    u_pred = self.get_v(u_pred, xt, t)
                     pred = pred + cfg*(pred - u_pred)
                 xt = self.step(xt, pred, num_steps)
             image = (xt[0].cpu().permute(1,2,0)/2.+0.5) # between 0 and 1

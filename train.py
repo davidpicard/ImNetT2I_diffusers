@@ -103,17 +103,20 @@ def main(cfg):
                     txt_latents = p*txt_latents + (1-p)*zeros_latents
 
                     # noise image
-                    time = torch.randint(train_scheduler.train_steps, (cfg.training.batch_size,), device=img.device)
+                    time = torch.randint(low=0, high=train_scheduler.train_steps, size=(cfg.training.batch_size,), device=img.device)
                     noise = torch.randn_like(img)
                     noisy_sample = train_scheduler.add_noise(img, time, noise)
 
                     # predict and compute loss
-                    target = img - noise
+                    target = train_scheduler.get_v(img, noisy_sample, time)
+                    
                     pred = model(hidden_states=noisy_sample,
                                 encoder_hidden_states=txt_latents,
                                 pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
                                 timestep=time,
                                 return_dict=False)[0]
+                    # get v from pred
+                    pred = train_scheduler.get_v(pred, noisy_sample, time)
                     
                     loss = F.mse_loss(pred, target)
 
