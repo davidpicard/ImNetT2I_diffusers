@@ -15,6 +15,24 @@ from pathlib import Path
 import wandb
 
 
+def save_ckpt(model, path, accelerator):
+    if accelerator.is_main_process:
+        try: 
+            sd = accelerator.get_state_dict(model, unwrap=True)
+            torch.save(sd, path)
+            print(f"... model saved to {path} ✅")
+        except Exception as e:
+            print(f"❌ could not save model to {path}")
+
+def load_ckpt(model, path, accelerator):
+    if accelerator.is_main_process:
+        try: 
+            sd = torch.load(path)
+            model.load_state_dict(sd)
+            print(f"... model loaded from {path} ✅ ", end='', flush=True)
+        except Exception as e:
+            print(f"❌ could not load model from {path}")
+
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg):
@@ -37,6 +55,8 @@ def main(cfg):
 
     print_r0("→ loading model...", end='', flush=True)
     model = SD3Transformer2DModel(sample_size=cfg.data.im_size,out_channels=cfg.model.in_channels, **(cfg.model))
+    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
+        load_ckpt(model, cfg.checkpoint.load_from, accelerator)
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr)
     print_r0(" done.✅")
 
@@ -46,9 +66,6 @@ def main(cfg):
     text_encoder.eval()
     print_r0(" done.✅")
 
-    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
-        accelerator.load_state(cfg.checkpoint.load_from)
-        
     print_r0("→ preparing distributed setting...", end='', flush=True)
     device = accelerator.device
     model, optimizer, text_encoder, train_ds = accelerator.prepare(model, optimizer, text_encoder, train_ds)
@@ -125,8 +142,8 @@ def main(cfg):
                 
                 if global_idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
-                    print_r0(f"→ saving checkpoint to {path}")
-                    accelerator.save_state(path)
+                    print_r0(f"→ saving checkpoint to {path} ", end='', flush=True)
+                    save_ckpt(model, path, accelerator)
 
             
 if __name__ == "__main__":
