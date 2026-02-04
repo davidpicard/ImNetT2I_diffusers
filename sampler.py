@@ -20,7 +20,7 @@ class FMEulerSampler():
     def step(self, sample, pred, num_timesteps):
         return sample + 1./num_timesteps * pred
 
-    def generate(self, xt, prompt: str, cfg: int=7.5, num_steps: int = 50, device: str = "cuda"):
+    def generate(self, xt, prompt: str, cfg: int=2.5, num_steps: int = 50, device: str = "cuda"):
         with torch.no_grad():
             prompts = ["{size: [512, 512], crop: [0.00, 1.00, 0.00, 1.00], prompt: "+prompt+"}"]
             enc = self.tokenizer(prompts, truncation=True, padding=True, max_length=64, return_tensors="pt")
@@ -38,7 +38,7 @@ class FMEulerSampler():
                                 pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
                                 timestep=t,
                                 return_dict=False)[0].detach()
-                if cfg > 1:
+                if cfg > 0:
                     u_pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=torch.zeros_like(txt_latents),
                                 pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
