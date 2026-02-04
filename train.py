@@ -46,13 +46,14 @@ def main(cfg):
     text_encoder.eval()
     print_r0(" done.✅")
 
+    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
+        accelerator.load_state(cfg.checkpoint.load_from)
+        
     print_r0("→ preparing distributed setting...", end='', flush=True)
     device = accelerator.device
     model, optimizer, text_encoder, train_ds = accelerator.prepare(model, optimizer, text_encoder, train_ds)
     print_r0(" done.✅")
 
-    if (cfg.checkpoint.load_from is not None) and Path(cfg.checkpoint.load_from).exists():
-        accelerator.load_state(cfg.checkpoint.load_from)
 
     if accelerator.is_main_process:
         wandb.init(
