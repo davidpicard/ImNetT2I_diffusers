@@ -50,7 +50,12 @@ def main(cfg):
 
     print_r0("→ loading dataset...", end='', flush=True)
     ds = CaptionImageNetDataset(cfg.data.imagenet_path, im_size=cfg.data.im_size, max_size=cfg.data.max_size)
-    train_ds = DataLoader(ds, batch_size=cfg.training.batch_size, shuffle=True, num_workers=cfg.data.num_workers, drop_last=True)
+    train_ds = DataLoader(ds, batch_size=cfg.training.batch_size, 
+                                shuffle=True, 
+                                num_workers=cfg.data.num_workers, 
+                                drop_last=True, 
+                                prefetch_factor=4, 
+                                persistent_workers=True)
     print_r0(" done.✅")
 
     print_r0("→ loading model...", end='', flush=True)
@@ -109,7 +114,7 @@ def main(cfg):
 
                     # predict and compute loss
                     target = train_scheduler.get_v(img, noisy_sample, time)
-                    
+
                     pred = model(hidden_states=noisy_sample,
                                 encoder_hidden_states=txt_latents,
                                 pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
@@ -147,7 +152,8 @@ def main(cfg):
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
                     print_r0(f"→ saving checkpoint to {path} ", end='', flush=True)
                     save_ckpt(model, path, accelerator)
-
+                    accelerator.wait_for_everyone()
+        accelerator.wait_for_everyone()
             
 if __name__ == "__main__":
     main()
