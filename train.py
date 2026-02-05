@@ -152,8 +152,6 @@ def main(cfg):
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
                     print_r0(f"→ saving checkpoint to {path} ", end='', flush=True)
                     save_ckpt(model, path, accelerator)
-                    accelerator.wait_for_everyone()
-        accelerator.wait_for_everyone()
             
 if __name__ == "__main__":
     main()
