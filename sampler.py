@@ -51,6 +51,6 @@ class FMEulerSampler():
                     u_pred = self.get_v(u_pred, xt, t)
                     pred = pred + cfg*(pred - u_pred)
                 xt = self.step(xt, pred, num_steps)
-            image = (xt[0].cpu().permute(1,2,0)/2.+0.5) # between 0 and 1
+            image = (xt[0].cpu().permute(1,2,0)/2.+0.5).clamp(0,1) # between 0 and 1
             image = np.uint8(255*image.numpy())
             return image
