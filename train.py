@@ -147,6 +147,24 @@ def main(cfg):
                         image = train_scheduler.generate(xt, prompt)
                         image = wandb.Image(image, caption=prompt)
                         wandb.log({"generated_image": image})
+
+                        prompt = "Pirate ship trapped in a cosmic maelstrom nebula, rendered in cosmic beach whirlpool engine, volumetric lighting, spectacular, ambient lights, light pollution, cinematic atmosphere, art nouveau style, illustration art artwork by SenseiJaye, intricate detail."
+                        xt = torch.randn_like(img)[0:1]
+                        image = train_scheduler.generate(xt, prompt)
+                        image = wandb.Image(image, caption=prompt)
+                        wandb.log({"generated_image 2": image})
+                        
+                        prompt = "A cozy gingerbread house nestled in a dusting of powdered sugar snow, adorned with vibrant candy canes and shimmering gumdrops"
+                        xt = torch.randn_like(img)[0:1]
+                        image = train_scheduler.generate(xt, prompt)
+                        image = wandb.Image(image, caption=prompt)
+                        wandb.log({"generated_image 3": image})
+
+                        prompt = "An elephant under the sea."
+                        xt = torch.randn_like(img)[0:1]
+                        image = train_scheduler.generate(xt, prompt)
+                        image = wandb.Image(image, caption=prompt)
+                        wandb.log({"generated_image 4": image})
                 
                 if global_idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
