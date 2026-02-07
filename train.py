@@ -13,6 +13,7 @@ from im_dataset import CaptionImageNetDataset
 from sampler import FMEulerSampler
 from pathlib import Path
 import wandb
+from test_prompts import test_prompts
 
 
 def save_ckpt(model, path, accelerator):
@@ -136,35 +137,13 @@ def main(cfg):
                 if global_idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
                     # generate image
                     with torch.no_grad():
-                        prompt = "This is a close-up photograph of a pair of purple thistle flowers on a plant. "\
-                            "The flowers have vibrant purple spines around the edges and are supported by thin stems. "\
-                            "They are surrounded by greenery with other leaves visible in the background, "\
-                            "suggesting the image might have been taken in a garden or a natural setting. "\
-                            "The focus of the image is on the flowers, highlighting their details and colors. "\
-                            "The thistle has a somewhat spiky appearance, which is typical for this type of flower. "\
-                            "The background is softly focused, which puts emphasis on the flowers themselves."
-                        xt = torch.randn_like(img)[0:1]
-                        image = train_scheduler.generate(xt, prompt)
-                        image = wandb.Image(image, caption=prompt)
-                        wandb.log({"generated_image": image})
-
-                        prompt = "Pirate ship trapped in a cosmic maelstrom nebula, rendered in cosmic beach whirlpool engine, volumetric lighting, spectacular, ambient lights, light pollution, cinematic atmosphere, art nouveau style, illustration art artwork by SenseiJaye, intricate detail."
-                        xt = torch.randn_like(img)[0:1]
-                        image = train_scheduler.generate(xt, prompt)
-                        image = wandb.Image(image, caption=prompt)
-                        wandb.log({"generated_image 2": image})
-                        
-                        prompt = "A cozy gingerbread house nestled in a dusting of powdered sugar snow, adorned with vibrant candy canes and shimmering gumdrops"
-                        xt = torch.randn_like(img)[0:1]
-                        image = train_scheduler.generate(xt, prompt)
-                        image = wandb.Image(image, caption=prompt)
-                        wandb.log({"generated_image 3": image})
-
-                        prompt = "An elephant under the sea."
-                        xt = torch.randn_like(img)[0:1]
-                        image = train_scheduler.generate(xt, prompt)
-                        image = wandb.Image(image, caption=prompt)
-                        wandb.log({"generated_image 4": image})
+                        log_images = []
+                        for prompt in test_prompts:
+                            xt = torch.randn_like(img)[0:1]
+                            image = train_scheduler.generate(xt, prompt)
+                            image = wandb.Image(image, caption=prompt)
+                            log_images.append(image)
+                        wandb.log({"generated_images": log_images})
                 
                 if global_idx % cfg.checkpoint.every_n_steps == 0 and accelerator.is_main_process:
                     path = f"{cfg.checkpoint.save_dir}/epoch_{e}_step_{global_idx}.ckpt"
