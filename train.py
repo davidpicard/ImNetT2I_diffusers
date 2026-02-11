@@ -126,7 +126,7 @@ def main(cfg):
                     # get v from pred
                     pred = train_scheduler.get_v(pred, noisy_sample, time)
                     
-                    loss = F.mse_loss(pred, target)
+                    loss = F.mse_loss(pred, target) + F.l1_loss(pred, target)
                     acc_loss.append(loss.item())
 
                     accelerator.backward(loss)
