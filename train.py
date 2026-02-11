@@ -86,6 +86,7 @@ def main(cfg):
     print_r0("→ start training:")
     train_scheduler = FMEulerSampler(cfg, model, tokenizer, text_encoder, train_steps=cfg.sampler.num_train_timesteps)
     for e in range(cfg.training.epochs):
+        acc_loss = []
         with tqdm(train_ds, miniters=cfg.accelerator.gradient_accumulation_steps, mininterval=0.5, disable=not accelerator.is_local_main_process) as bar:
             for idx, batch in enumerate(bar):
                 global_idx = idx + e*len(train_ds)
@@ -126,14 +127,17 @@ def main(cfg):
                     pred = train_scheduler.get_v(pred, noisy_sample, time)
                     
                     loss = F.mse_loss(pred, target)
+                    acc_loss.append(loss.item())
 
                     accelerator.backward(loss)
                     optimizer.step()
                     optimizer.zero_grad()
                 if idx % cfg.accelerator.gradient_accumulation_steps == 0:
-                    bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {loss.item():.3f}")
+                    acc_loss = np.mean(acc_loss)
+                    bar.set_postfix_str(f"epoch [{e}/{cfg.training.epochs}] mse: {acc_loss:.3f}")
                     if accelerator.is_main_process:
-                        wandb.log({"epoch": e, "global_step": global_idx, "train_loss": loss.item()})
+                        wandb.log({"epoch": e, "global_step": global_idx, "train_loss": acc_loss})
+                    acc_loss = []
 
                 if global_idx % cfg.logging.log_images_every_n_steps == 0 and accelerator.is_main_process:
                     # generate image
