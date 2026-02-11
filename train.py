@@ -103,6 +103,7 @@ def main(cfg):
                     outputs = text_encoder.forward(input_ids=ids, attention_mask=att, output_hidden_states=True)
                     hidden = outputs.hidden_states
                     txt_latents = hidden[-1].detach()
+                    pooled_latents = txt_latents.mean(dim=1)
                     # condition drop out
                     zeros_latents = torch.zeros_like(txt_latents)
                     p = (torch.rand((cfg.training.batch_size,1, 1)).to(device)>0.1).float()
@@ -118,7 +119,7 @@ def main(cfg):
 
                     pred = model(hidden_states=noisy_sample,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(cfg.training.batch_size, cfg.model.pooled_projection_dim).to(device),
+                                pooled_projections=pooled_latents,
                                 timestep=time,
                                 return_dict=False)[0]
                     # get v from pred

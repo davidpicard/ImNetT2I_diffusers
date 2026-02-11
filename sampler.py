@@ -23,29 +23,30 @@ class FMEulerSampler():
     def step(self, sample, pred, num_timesteps):
         return sample + 1./num_timesteps * pred
 
-    def generate(self, xt, prompt: str, cfg: int=2.5, num_steps: int = 50, device: str = "cuda"):
+    def generate(self, xt, prompt: str, cfg: int=2.5, size: int = 512, num_steps: int = 50, device: str = "cuda"):
         with torch.no_grad():
-            prompts = ["{size: [512, 512], crop: [0.00, 1.00, 0.00, 1.00], prompt: "+prompt+"}"]
+            prompts = ["{size: [{size}, {size}], crop: [0.00, 1.00, 0.00, 1.00], prompt: "+prompt+"}"]
             enc = self.tokenizer(prompts, truncation=True, padding=True, max_length=64, return_tensors="pt")
             ids = enc['input_ids'].to(device)
             att = enc.get('attention_mask', None).to(device)
             outputs = self.text_encoder.forward(input_ids=ids, attention_mask=att, output_hidden_states=True)
             hidden = outputs.hidden_states
             txt_latents = hidden[-1].detach()
+            pooled_latents = txt_latents.mean(dim=1)
 
             print(f"prompts: {prompts[0]}")
             for t in self.get_timesteps(num_steps):
                 t = torch.tensor([t,]).to(device)
                 pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=txt_latents,
-                                pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
+                                pooled_projections=pooled_latents,
                                 timestep=t,
                                 return_dict=False)[0].detach()
                 pred = self.get_v(pred, xt, t)
                 if cfg > 0:
                     u_pred = self.model(hidden_states=xt,
                                 encoder_hidden_states=torch.zeros_like(txt_latents),
-                                pooled_projections=torch.zeros(1, self.cfg.model.pooled_projection_dim).to(device),
+                                pooled_projections=torch.zeros_like(pooled_latents),
                                 timestep=t,
                                 return_dict=False)[0].detach()
                     u_pred = self.get_v(u_pred, xt, t)
